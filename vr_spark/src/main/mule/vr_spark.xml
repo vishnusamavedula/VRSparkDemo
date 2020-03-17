@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<flow name="vr_machine_status" doc:id="736f6022-57e7-4590-9301-2d35659e0d98" >
+		<http:listener doc:name="GET /Status" doc:id="f7ac0566-402e-41ad-942e-01bde934fa3b" config-ref="HTTP_Listener_config" path="/getStatus"/>
+		<set-variable value="#[attributes.queryParams.asset]" doc:name="Capture Asset Name" doc:id="68959dee-474e-470a-8fdc-2dffebba7905" variableName="assetParam"/>
+		<db:select doc:name="Query Machine Status DL" doc:id="d17019a0-f9cf-442b-ae48-4530db1756cb" config-ref="Database_Config">
+			<db:sql >select * from VRstatus where Asset_Name like :asset</db:sql>
+			<db:input-parameters ><![CDATA[#[{'asset': vars.assetParam ++ "%"}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Payload for Reporting" doc:id="1dd04293-7adb-4a74-9b6d-04c34d7122bc" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	Name: payload01.Asset_Name default "",
+	ID: payload01.ID default "",
+	Status: upper (payload01.Asset_Status default ""),
+	Description: payload01.Asset_Description default "",
+	Location: payload01.Asset_Location default "",
+	Year: payload01.Asset_Year default 0,
+	"Memory Modules": payload01.Memory_Modules default "",
+	Problems: payload01.Asset_Problems default "",
+	"Current Time": now()
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="04ae2e39-3abd-474d-9dec-ca752c244edd" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+ "Asset": payload[0].Name,
+ "Description": payload[0].Description,
+ "Location": payload[0].Location,
+ "Year Installed": payload[0].Year,
+ "Issue": payload[0].Problems,
+ "Report Time": now().hour ++ ":" ++ now().minutes,
+ "Report Summary": payload[0].Name ++ "'s current status is at: " ++ payload[0].Status ++ ", with " ++ payload[0]."Memory Modules" ++ " modules." ++ " Installed in " ++ payload[0].Year ++ " at " ++ payload[0].Location ++ " , this is a " ++ payload[0].Description ++ ". Report generated at " ++ now().hour ++ ":" ++ now().minutes ++ " on "++ now().year ++ "-"++ now().month ++ "-" ++ now().day 
+ 
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Audit Logs" doc:id="4fb83edb-18c8-4cfd-b7c9-bb5188f06799" />
+	</flow>
+</mule>

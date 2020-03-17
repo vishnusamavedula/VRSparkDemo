@@ -1,0 +1,16 @@
+[
+  {
+    "Name": "ATMCoral-NA-987",
+    "Problems": "No Problems were reported",
+    "Description": "This is a Mythical Series 3 ATM, with color display",
+    "ID": "2345AQW",
+    "LastServiced": "2019-01-01T00:00:00",
+    "Location": "TXS-21",
+    "Status": "Optimum Performance",
+    "Year": 2010,
+    "Cooling Fan Status": "Wokring",
+    "Power Supply": "1400VA, 900W",
+    "System Load": "70%",
+    "Memory Modules": "16 of 16 Wokring"
+  }
+]

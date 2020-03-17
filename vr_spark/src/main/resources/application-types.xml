@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<types:mule xmlns:types="http://www.mulesoft.org/schema/mule/types">
+  <types:catalog>
+    <types:type name="machineScheme" format="json">
+      <types:shape format="weave" example="examples/machine_scheme-2.json"><![CDATA[%dw 2.0
+
+type machineScheme = Array<{|  Name: String,   Problems: String,   Description: String,   ID: String,   LastServiced: String,   Location: String,   Status: String,   Year: Number {"typeId": "int"},   "Cooling Fan Status": String,   "Power Supply": String,   "System Load": String,   "Memory Modules": String|}> {"example": "[{\"Name\":\"ATMCoral-NA-987\",\"Problems\":\"No Problems were reported\",\"Description\":\"This is a Mythical Series 3 ATM, with color display\",\"ID\":\"2345AQW\",\"LastServiced\":\"2019-01-01T00:00:00\",\"Location\":\"TXS-21\",\"Status\":\"Optimum Performance\",\"Year\":2010,\"Cooling Fan Status\":\"Wokring\",\"Power Supply\":\"1400VA, 900W\",\"System Load\":\"70%\",\"Memory Modules\":\"16 of 16 Wokring\"}]"}
+
+]]></types:shape>
+    </types:type>
+  </types:catalog>
+  <types:enrichment select="#1dd04293-7adb-4a74-9b6d-04c34d7122bc">
+    <types:processor-declaration>
+      <types:output-event>
+        <types:message>
+          <types:payload type="machineScheme"/>
+        </types:message>
+      </types:output-event>
+    </types:processor-declaration>
+  </types:enrichment>
+</types:mule>

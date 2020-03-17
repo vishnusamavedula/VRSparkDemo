@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:twilio-connector="http://www.mulesoft.org/schema/mule/twilio-connector" xmlns:slack="http://www.mulesoft.org/schema/mule/slack"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/slack http://www.mulesoft.org/schema/mule/slack/current/mule-slack.xsd
+http://www.mulesoft.org/schema/mule/twilio-connector http://www.mulesoft.org/schema/mule/twilio-connector/current/mule-twilio-connector.xsd">
+	<flow name="VR_CreateServiceRequest_Flow" doc:id="030bfaa7-b802-41c6-9bc8-c9541da29c22" >
+		<http:listener doc:name="API Triggered from VR" doc:id="edd03d17-8f16-4127-aef2-dd4c8251224b" config-ref="HTTP_Listener_config" path="/create"/>
+		<set-variable value="#[attributes.queryParams.asset]" doc:name="Capture Asset Name" doc:id="2647c05a-9429-45cc-ba36-dc12945b1dea" variableName="assetParam"/>
+		<db:select doc:name="Query DB for Asset Details" doc:id="90dc4ab5-7450-4e30-adae-f8a8ea32f596" config-ref="Database_Config">
+			<db:sql >Select Asset_Name, Asset_Description, Asset_Problems from VRstatus where Asset_Name like :asset</db:sql>
+			<db:input-parameters ><![CDATA[#[{'asset': vars.assetParam ++ "%"}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform DB Response" doc:id="f94cbfec-37cd-4ffe-900d-326412a28e8c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	"Asset Name": payload01.Asset_Name default "",
+	"Asset Problems": payload01.Asset_Problems default "",
+	"Asset Description": payload01.Asset_Description default ""
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform SFDC Input" doc:id="dfa4164f-1f02-4816-89f1-3b07012eb379" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	Subject: payload01."Asset Name" ++ " - Service Order",
+	Description: payload01."Asset Name" ++ " is currently experiencing issues." ++ "This is a " ++ payload01."Asset Description" ++ "." ++  "	It's currently experiencing " ++ payload01."Asset Problems" ++ ".",
+	AccountId: "001f200002215IDAAY",
+	ContactId: "003f200002wBlh4AAC"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:create type="Case" doc:name="Create Case for Machine Service" doc:id="1ffdba36-9058-40ab-8ce6-90731da584f2" config-ref="Salesforce_Config"/>
+		<set-variable value="#[payload[0].id]" doc:name="Case ID Variable" doc:id="0ee73da5-8d60-4814-b8a5-b016f36b1117" variableName="caseId" />
+		<ee:transform doc:name="Create Notification Message" doc:id="b6319a09-25eb-4454-ba45-48042b3fdd37">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+
+"Service ID "  ++ payload[0].id ++ " has been created. A rep has been assigned and new parts will be installed soon."
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload]" doc:name="Notification Message Variable" doc:id="ebba2188-fc14-440f-b55c-88429e8cbd42" variableName="inputMessage" />
+		<flow-ref doc:name="callSlack" doc:id="a24c0ccd-675d-441f-b40e-1e1f10b4f3f4" name="slackNotification" />
+		<flow-ref doc:name="callTwilio" doc:id="bd603d60-df79-4b12-bc89-6cc0f31224a4" name="twilioNotification" />
+	</flow>
+	<flow name="twilioNotification" doc:id="74fa1ff2-7258-486a-8749-7f0cca9f9d36" >
+		<salesforce:query doc:name="Query" doc:id="f97c8076-2269-4a46-ae21-9d8c726aa7e0" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query >SELECT CaseNumber, Id, Origin, ContactId, ContactPhone, AccountId, CreatedDate FROM Case WHERE Id = ':cid'</salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	cid : vars.caseId
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<set-variable value="#[payload[0].CaseNumber]" doc:name="Capture Case Number" doc:id="3f500a98-c6aa-4dc4-a865-29b3f08171ca" variableName="caseNumber"/>
+		<set-variable value="#[payload[0].CreatedDate]" doc:name="Capture Created Date" doc:id="40c94cdc-05bd-42e6-a575-d2423e267437" variableName="createdDate"/>
+		<ee:transform doc:name="Create Payload for Twilio" doc:id="abaa1d9f-beb1-4ec0-891a-2cdf52f6facb">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	From:"placeholder",
+	To: payload[0].ContactPhone,	
+	Body: vars.inputMessage
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<twilio-connector:send-message doc:name="Send SMS to Salesforce Contact" doc:id="bc2ac1ba-dc23-495d-ac89-1143418146d8" config-ref="Twilio_Connector_Config" account-sid="AC7d575aae8750c73925c0237abdc7b00a">
+		</twilio-connector:send-message>
+		<ee:transform doc:name="Send final message back to VR" doc:id="89f51b92-2e77-46fb-bfcf-dba088b06bb8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+"Case " ++ vars.caseNumber ++  " has been created at " ++  vars.createdDate
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="slackNotification" doc:id="67055c46-f13f-4670-9e8d-a1be72757463" >
+		<slack:post-message channel="C6XF0PZC3" doc:name="Chat - Post Message" doc:id="c4086a97-35d5-4536-bc10-4d284f38ae66" config-ref="Slack_Config">
+			<slack:message><![CDATA[#[vars.inputMessage]]]></slack:message>
+		</slack:post-message>
+		<logger level="INFO" doc:name="Logger" doc:id="c0d21f3c-515c-4ec2-ba76-5a9a8ec36520" message="#[payload]"/>
+	</flow>
+</mule>
